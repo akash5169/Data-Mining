@@ -1,0 +1,352 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+resReviewsData <- read_csv2('K:/MS MIS/Fall 2021/Data Mining/Assignment 4/yelpRestaurantReviews_sample_s21b/yelpRestaurantReviews_sample_s21b.csv')
+
+
+```
+```{r}
+names(resReviewsData)[names(resReviewsData) == 'starsReview'] <- "stars"
+
+head(resReviewsData)
+```
+
+
+```{r}
+library(ggplot2)
+
+library(dplyr)
+```
+
+```{r}
+starDist<-resReviewsData %>% group_by(stars) %>% count()
+
+ggplot(resReviewsData, aes(x=stars)) + geom_bar(width = 0.5) + xlab("stars") + ylab("Number of Reviews")
+```
+
+```{r}
+resReviewsData %>% group_by(business_id,starsBusiness)%>%summarise(starsAverage=round(mean(stars),1))
+```
+
+
+```{r}
+ggplot(data = resReviewsData, aes(x = funny, y =stars)) +
+  geom_point() +
+  labs(x = "Funny",y = "Stars")
+
+```
+
+```{r}
+ggplot(data = resReviewsData, aes(x = cool, y =stars)) +
+  geom_point() +
+  labs(x = "Cool",
+    y = "Stars")
+```
+
+```{r}
+ggplot(data = resReviewsData, aes(x = cool, y =funny)) +
+  geom_point() +
+  labs(x = "Cool",
+    y = "Funny")
+```
+```{r}
+resReviewData %>% head()
+```
+
+```{r}
+resReviewsData %>% group_by(state) %>% tally()%>% view()
+```
+
+```{r}
+resReviewsData$sentiment <- ifelse(resReviewsData$stars >= 3, "Positive", "Negative");
+
+resReviewsData %>% group_by(sentiment) %>% tally()%>% view()
+```
+
+
+```{r}
+rrData <- resReviewsData %>% filter(str_detect(postal_code, "^[0-9]{1,5}"))
+```
+
+```{r}
+resReviewsData %>% group_by(state) %>% tally()%>% view()
+```
+
+```{r}
+library(tidytext)
+library(SnowballC)
+library(textstem)
+```
+
+
+```{r}
+rrTokens <- rrData %>% select(review_id, stars, text ) %>% unnest_tokens(word, text)
+```
+
+```{r}
+dim(rrTokens)
+head(rrTokens)
+```
+
+```{r}
+rrTokens %>% distinct(word) %>% dim()
+
+rrTokens %>% count(word, sort=TRUE) %>% top_n(10)
+
+rrTokens <- rrTokens %>% anti_join(stop_words)
+
+rrTokens %>% count(word, sort=TRUE) %>% top_n(10)
+
+rrTokens %>% distinct(word) %>% dim()
+```
+```{r}
+rareWords <-rrTokens %>% count(word, sort=TRUE) %>% filter(n<10)
+
+head(rareWords)
+```
+
+```{r}
+xx<-anti_join(rrTokens, rareWords)
+
+xx %>% count(word, sort=TRUE) %>% view()
+```
+
+
+```{r}
+xx <- xx %>% filter(str_detect(word,"[0-9]") == FALSE)
+
+```
+
+```{r}
+xx %>% count(word, sort=TRUE) %>% view()
+rrTokens<- xx
+```
+
+```{r}
+rrTokens %>% distinct(word) %>% dim()
+
+```
+
+
+```{r}
+rrTokens %>% group_by(stars) %>% count(word, sort=TRUE)
+```
+
+
+```{r}
+ws <- rrTokens %>% group_by(stars) %>% count(word, sort=TRUE)
+ws<- ws %>% group_by(stars) %>% mutate(prop=n/sum(n))
+```
+
+```{r}
+ws %>% filter(word=='love')
+```
+```{r}
+ws %>% group_by(stars) %>% arrange(stars, desc(prop)) %>% view()
+
+ws %>% group_by(stars) %>% arrange(stars, desc(prop))%>% filter(row_number()<=20)%>%view()
+```
+
+
+```{r}
+ws %>% group_by(stars) %>% arrange(stars, desc(prop))%>% filter(row_number()<=12)%>% ggplot(aes(word, prop))+geom_col()+coord_flip()+facet_wrap((~stars))
+```
+```{r}
+ws %>% filter(! word %in% c('food','time','restaurant', 'service','told'))%>% group_by(stars) %>% arrange(stars, desc(prop))%>% filter(row_number() <=12)%>% ggplot(aes(reorder(word,prop), prop))+geom_col()+coord_flip()+facet_wrap((~stars))+geom_col(width = 0.05, position = "dodge")
+```
+```{r}
+xx<- ws %>% group_by(word) %>% summarise( totWS = sum(stars*prop))
+#What are the 20 words with highest and lowest star rating
+xx %>% top_n(20)
+```
+```{r}
+xx %>% top_n(-20)
+```
+```{r}
+rrTokens_stem <- rrTokens %>% mutate(word_stem = SnowballC::wordStem(word))
+rrTokens_lemm <- rrTokens %>% mutate(word_lemma = textstem::lemmatize_words(word))
+```
+
+```{r}
+rrTokens <- resReviewsData %>% select(review_id, stars, text )%>% unnest_tokens(word, text) %>% anti_join(stop_words)%>% mutate(word = textstem::lemmatize_words(word))
+```
+
+
+```{r}
+rrTokens<-rrTokens %>% filter(str_length(word)<=3 | str_length(word)<=15)
+```
+
+
+```{r}
+rrTokens<- rrTokens %>% group_by(review_id, stars) %>% count(word)
+
+rrTokens %>% view()
+```
+
+
+```{r}
+totWords<-rrTokens %>% group_by(review_id)%>% count(word, sort=TRUE) %>% summarise(total=sum(n))
+```
+
+
+```{r}
+xx<-left_join(rrTokens, totWords)
+```
+```{r}
+xx<-xx %>% mutate(tf=n/total)
+
+xx %>%head() %>%  view()
+```
+
+```{r}
+rrTokens<-rrTokens %>% bind_tf_idf(word, review_id, n)
+
+rrTokens %>% head() %>% view()
+```
+
+
+```{r}
+library(textdata)
+
+```
+
+```{r}
+rrSenti_bing<- rrTokens %>% left_join( get_sentiments("bing"), by="word")
+
+rrSenti_bing<- rrTokens %>% inner_join( get_sentiments("bing"), by="word")
+
+xx<-rrSenti_bing %>% group_by(word, sentiment) %>% summarise(totOcc=sum(n)) %>% arrange(sentiment, desc(totOcc))
+
+xx %>% head()
+
+xx<- xx %>% mutate (totOcc=ifelse(sentiment=="positive", totOcc, -totOcc))
+
+xx %>% head()
+```
+
+```{r}
+rrSenti_nrc<-rrTokens %>% inner_join(get_sentiments("nrc"), by="word") %>%
+group_by (word, sentiment) %>% summarise(totOcc=sum(n)) %>%
+arrange(sentiment, desc(totOcc))
+
+rrSenti_nrc %>% group_by(sentiment) %>% summarise(count=n(), sumn=sum(totOcc))
+
+
+
+```
+```{r}
+xx<-rrSenti_nrc %>% mutate(goodBad=ifelse(sentiment %in% c('anger', 'disgust', 'fear', 'sadness', 'negative'), -totOcc,
+ifelse(sentiment %in% c('positive', 'joy', 'anticipation', 'trust'), totOcc, 0)))
+
+xx<-ungroup(xx)
+
+
+top_n(xx, -20)
+
+top_n(xx, 20)
+
+```
+
+```{r}
+rrSenti_bing<- rrTokens%>% inner_join(get_sentiments("bing"), by="word")
+
+revSenti_bing <- rrSenti_bing %>% group_by(review_id, stars) %>%summarise(nwords=n(),posSum=sum(sentiment=='positive'),
+negSum=sum(sentiment=='negative'))
+
+revSenti_bing<- revSenti_bing %>% mutate(posProp=posSum/nwords, negProp=negSum/nwords)
+
+revSenti_bing<- revSenti_bing%>% mutate(sentiScore=posProp-negProp)
+
+revSenti_bing %>% group_by(stars) %>%
+summarise(avgPos=mean(posProp), avgNeg=mean(negProp), avgSentiSc=mean(sentiScore))
+
+dim(rrSenti_bing)
+
+
+```
+```{r}
+rrSenti_afinn<- rrTokens %>% inner_join(get_sentiments("afinn"), by="word")
+
+revSenti_afinn <- rrSenti_afinn %>% group_by(review_id, stars)%>% summarise(nwords=n(), sentiSum =sum(value))
+
+revSenti_afinn %>% group_by(stars)%>% summarise(avgLen=mean(nwords), avgSenti=mean(sentiSum))
+
+```
+```{r}
+revSenti_afinn <- revSenti_afinn %>% mutate(hiLo = ifelse(stars <= 2, -1, ifelse(stars >=4, 1, 0 )))
+
+revSenti_afinn <- revSenti_afinn %>% mutate(pred_hiLo=ifelse(sentiSum > 0, 1, -1))
+
+xx<-revSenti_afinn %>% filter(hiLo!=0)
+
+table(actual=xx$hiLo, predicted=xx$pred_hiLo )
+
+
+```
+
+```{r}
+
+revSenti_afinn <- revSenti_afinn %>% mutate(hiLo=ifelse(stars<2,-1, ifelse(stars>4, 1, 0 )))
+revSenti_afinn <- revSenti_afinn %>% mutate(pred_hiLo=ifelse(sentiSum >0, 1, -1))
+xx<-revSenti_afinn %>% filter(hiLo!=0)
+table(actual=xx$hiLo, predicted=xx$pred_hiLo )
+```
+```{r}
+revDTM_sentiBing <- rrSenti_bing %>% group_by(review_id,stars) %>% pivot_wider(id_cols = c(review_id, stars), names_from = word, values_from = tf_idf) %>%ungroup()
+
+dim(revDTM_sentiBing)
+
+```
+
+```{r}
+revDTM_sentiBing <- revDTM_sentiBing %>% filter(stars!=3) %>% mutate(hiLo=ifelse(stars<=2, -1, 1)) %>% select(-stars)
+
+dim(revDTM_sentiBing)
+
+revDTM_sentiBing %>% group_by(hiLo) %>% tally()
+
+```
+```{r}
+
+library(ranger)
+```
+
+```{r}
+revDTM_sentiBing <- revDTM_sentiBing %>% replace(., is.na(.), 0)
+revDTM_sentiBing$hiLo <- as.factor(revDTM_sentiBing$hiLo)
+
+
+
+```
+
+```{r}
+library(rsample)
+
+revDTM_sentiBing_split<- initial_split(revDTM_sentiBing, 0.5)
+revDTM_sentiBing_trn<- training(revDTM_sentiBing_split)
+revDTM_sentiBing_tst<- testing(revDTM_sentiBing_split)
+
+```
+
+```{r}
+rfModel1<-ranger(dependent.variable.name = "hiLo",data=revDTM_sentiBing_trn %>% select(-review_id), num.trees = 500,importance='permutation', probability = TRUE)
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

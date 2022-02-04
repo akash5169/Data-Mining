@@ -1,0 +1,300 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggplotgui)
+```
+
+```{r}
+lcdf <- read_csv('K:/MS MIS/Fall 2021/Data Mining/Assignment 1/lcData100K.csv')
+```
+```{r}
+#A.1 & A.2
+#(a)(i)
+#filtering out the loan records having loan_status = Current.
+lcdf <- lcdf %>%  filter(loan_status !="Current")
+
+#comparing the number of loans based on the loan status
+lcdf %>% group_by(loan_status) %>% tally()
+
+#variation of default rate as per the grade
+lcdf1 <- lcdf %>% group_by(grade) %>% summarise(nLoans=n(), 
+defaults=sum(loan_status=="Charged Off"), 
+defaultRate=defaults/nLoans, avgInterest= mean(int_rate), 
+stdInterest=sd(int_rate), avgLoanAMt=mean(loan_amnt), 
+avgPmnt=mean(total_pymnt))
+lcdf1
+ggplot(lcdf1, aes(x=grade, y=defaultRate)) + geom_bar(stat="identity")
+
+#variation of default rate as per the sub-grade
+lcdf2 <- lcdf %>% group_by(sub_grade) %>% summarise(nLoans=n(), 
+defaults=sum(loan_status=="Charged Off"), 
+defaultRate=defaults/nLoans, avgInterest= mean(int_rate), 
+stdInterest=sd(int_rate), avgLoanAMt=mean(loan_amnt), 
+avgPmnt=mean(total_pymnt))
+lcdf2
+ggplot(lcdf2, aes(x=sub_grade, y=defaultRate)) + geom_bar(stat="identity")
+
+#total number of loans as per grade
+lcdf %>% group_by(grade) %>% summarise(n())
+ggplot(lcdf, aes(x=grade, fill=loan_status)) + geom_histogram(stat="count")
+
+ggplot(lcdf, aes( x = int_rate)) + geom_histogram(aes(fill=grade))
+ggplot(lcdf, aes( x = loan_amnt)) + geom_histogram(aes(fill=grade))
+ggplot(lcdf, aes( x = loan_amnt)) + geom_histogram(aes(fill=grade)) + facet_wrap(~loan_status)
+
+#variation in average mean, standard deviation, maximum and minimum in the grade.
+lcdf4<-lcdf %>% group_by(grade) %>% summarise(avg_int=mean(int_rate),sd_int=sd(int_rate), max_int=max(int_rate),min_int=min(int_rate))
+lcdf4
+lcdf %>% group_by(sub_grade) %>% summarise(avg_int=mean(int_rate),sd_int=sd(int_rate), max_int=max(int_rate),min_int=min(int_rate))
+lcdf4_subgrade<-lcdf %>% group_by(sub_grade,loan_status) %>% summarise(avg_int=mean(int_rate),sd_int=sd(int_rate), max_int=max(int_rate),min_int=min(int_rate))
+lcdf4_subgrade
+ggplot(lcdf4_subgrade, aes(x=sub_grade,y=avg_int, fill=loan_status)) + geom_bar(stat="identity")
+
+
+ggplot(lcdf4, aes(x=grade, y=avg_int)) + geom_bar(stat="identity")
+ggplot(lcdf4, aes(x=grade, y=sd_int)) + geom_bar(stat="identity")
+ggplot(lcdf4, aes(x=grade, y=max_int)) + geom_bar(stat="identity")
+ggplot(lcdf4, aes(x=grade, y=min_int)) + geom_bar(stat="identity")
+
+
+
+```
+
+```{r}
+
+#2 A.3
+
+lcdf$last_pymnt_d<-paste(lcdf$last_pymnt_d, "-01", sep = "")
+#head(lcdf[, c("last_pymnt_d", "issue_d")])
+temp1<-parse_date_time(lcdf$last_pymnt_d,  "myd")
+temp1
+lcdf$last_pymnt_d<-temp1
+#head(lcdf[, c("last_pymnt_d", "issue_d")])
+
+#filtering out the loans which are fully paid
+lcdf5 <- filter(lcdf,loan_status=="Fully Paid")
+lcdf5 %>% group_by(loan_status) %>% tally()
+
+#ploting the graph of actual term(years) with respect to the interest rate and grade
+lcdf5$actual_term_year<- as.duration(lcdf5$issue_d  %--% lcdf5$last_pymnt_d)/dyears(1)
+lcdf5actual_term <- lcdf5 %>% group_by(grade) %>% summarise(nloans=n(), median_loan_amnt=median(loan_amnt), avg_int_rate=mean(int_rate),median_actual_term=median(actual_term_year))
+
+graph <- ggplot(lcdf5, aes(x = int_rate, y = actual_term_year, colour = grade)) +
+  geom_boxplot(notch = FALSE) +
+  theme_bw()
+graph
+
+head(lcdf[, c("last_pymnt_d", "issue_d")])
+
+#Notice that issue_d is a date variable (of type date), while last_pymnt_d is of type character (like "Dec-2018", having month-year but no date). 
+#So we need to first change the character type to date:
+#     First step is to past "01-" to the character string, to get something like "01-Dec-2018", i.e. first of each month 
+lcdf$last_pymnt_d<-paste(lcdf$last_pymnt_d, "-01", sep = "")
+#     Then convert this character to a date type variable
+
+temp1<-parse_date_time(lcdf$last_pymnt_d,  "myd")
+lcdf$last_pymnt_d<-temp1
+
+
+#Check their format now
+head(lcdf[, c("last_pymnt_d", "issue_d")])
+
+
+#Now we can compute the duration between two dates using 
+#      as.duration(lcdf$issue_d  %--% lcdf$last_pymnt_d))
+#   This will return the duration in seconds -- try  
+#          x<- as.duration(lcdf$issue_d  %--% lcdf$last_pymnt_d)
+#          head(x)
+#     To convert it to duration in weeks, we can use 
+#          x<- as.duration(lcdf$issue_d  %--% lcdf$last_pymnt_d)/dweeks(1)
+#      Or to get the duration in years
+x<- as.duration(lcdf$issue_d  %--% lcdf$last_pymnt_d)/dyears(1)
+
+#Another issue to consider: what about those loans which are charged-off? These are not paid back fully by the end of the 3-year term, so the duration as calculated above will not give the accurate value for the actual-term. For these loans, we can set the actual-term at 3.
+
+lcdf$actualTerm <- ifelse(lcdf$loan_status=="Fully Paid", as.duration(lcdf$issue_d  %--% lcdf$last_pymnt_d)/dyears(1), 3)
+lcdffullypaid<-lcdf %>% filter(loan_status=="Fully Paid")
+lcdffullypaid %>% head(10)
+#ggplot_shiny(lcdffullypaid)
+
+#total actual return
+lcdf$actualReturn <- ifelse(lcdf$actualTerm>0, ((lcdf$total_pymnt -lcdf$funded_amnt))*(1/lcdf$actualTerm), 0)
+sum(lcdf$actualReturn)
+
+#Then, considering this actual term, the actual annual percent return is
+lcdf$actualReturnPercent <- ifelse(lcdf$actualTerm>0, ((lcdf$total_pymnt -lcdf$funded_amnt)/lcdf$funded_amnt)*(1/lcdf$actualTerm)*100, 0)
+mean(lcdf$actualReturnPercent)
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+#Q 2. iv)
+#calculate annual return
+
+#total annual return
+annualRet <- (sum(lcdf$total_pymnt) -sum(lcdf$funded_amnt))*(12/36)
+annualRet
+
+#total annual percent return
+percentAnnRet<-(annualRet/sum(lcdf$funded_amnt))*100
+percentAnnRet
+#annual return percent for each sample data
+lcdf$annRet <- ((lcdf$total_pymnt -lcdf$funded_amnt)/lcdf$funded_amnt)*(12/36)*100
+
+#Grade wise summary
+lcdf %>% group_by(grade) %>% summarise(nLoans=n(), defaults=sum(loan_status=="Charged Off"),defaultPer=((sum(loan_status=="Charged Off")/n())*100), avgInterest= mean(int_rate), stdInterest=sd(int_rate), avgLoanAMt=mean(loan_amnt), avgPmnt=mean(total_pymnt), avgRet=mean(annRet), avgActRet=mean(actualReturnPercent),stdRet=sd(annRet), minRet=min(annRet), maxRet=max(annRet))
+
+#Sub-grade wise summary
+lcdf %>% group_by(sub_grade) %>% summarise(nLoans=n(), defaults=sum(loan_status=="Charged Off"),defaultPer=((sum(loan_status=="Charged Off")/n())*100), avgInterest= mean(int_rate), stdInterest=sd(int_rate), avgLoanAMt=mean(loan_amnt), avgPmnt=mean(total_pymnt), avgRet=mean(annRet), avgActRet=mean(actualReturnPercent),stdRet=sd(annRet), minRet=min(annRet), maxRet=max(annRet))
+
+
+```
+
+```{r}
+
+#Grade wise summary for default loans
+lcdf %>% filter(loan_status=="Charged Off") %>% group_by(grade) %>% summarise(nLoans=n(), avgInterest= mean(int_rate), stdInterest=sd(int_rate), avgLoanAMt=mean(loan_amnt), avgPmnt=mean(total_pymnt), avgRet=mean(annRet),avgActRet=mean(actualReturnPercent), stdRet=sd(annRet), minRet=min(annRet), maxRet=max(annRet))
+
+#Sub grade wise summary for default loans
+lcdf %>% filter(loan_status=="Charged Off") %>% group_by(sub_grade) %>% summarise(nLoans=n(), avgInterest= mean(int_rate), stdInterest=sd(int_rate), avgLoanAMt=mean(loan_amnt), avgPmnt=mean(total_pymnt), avgRet=mean(annRet),avgActRet=mean(actualReturnPercent), stdRet=sd(annRet), minRet=min(annRet), maxRet=max(annRet))
+
+
+```
+```{r}
+#Grade wise summary for default loans
+lcdf %>% filter(loan_status=="Charged Off") %>% group_by(grade) %>% summarise(nLoans=n(), avgLoanAMt=mean(loan_amnt), avgPmnt=mean(total_pymnt), avgRet=mean(annRet),avgActRet=mean(actualReturnPercent))
+
+#Sub grade wise summary for default loans
+lcdf %>% filter(loan_status=="Charged Off") %>% group_by(sub_grade) %>% summarise(nLoans=n(), avgLoanAMt=mean(loan_amnt), avgPmnt=mean(total_pymnt), avgRet=mean(annRet),avgActRet=mean(actualReturnPercent))
+```
+```{r}
+
+#Q 2) v
+
+lcdf %>% group_by(purpose) %>% tally(sort = TRUE)
+lcdf %>% group_by(purpose) %>% summarise(nLoans=n(), defaults=sum(loan_status=="Charged Off"), defaultRate=defaults/nLoans, avgIntRate=mean(int_rate),  avgLoanAmt=mean(loan_amnt),  avgActRet = mean(actualReturnPercent), avgActTerm=mean(actualTerm)) %>% arrange(desc(nLoans))
+
+
+
+#Does loan-grade vary by purpose?
+table(lcdf$purpose, lcdf$grade)
+
+
+```
+
+
+```{r}
+#2.  a. (vi)
+table(lcdf$loan_amnt, lcdf$emp_length)
+
+table(lcdf$loan_status, lcdf$emp_length)
+
+table(lcdf$grade, lcdf$emp_length)
+
+table(lcdf$purpose, lcdf$emp_length)
+
+#2. a. (vii)
+#2(vii)
+#Derived attribute 1: proportion of open revolving accounts
+totReturn=(lcdf$total_pymnt)/lcdf$funded_amnt 
+#grade,status
+lcdf %>% group_by(loan_status) %>% summarise(mean(totReturn))
+
+lcdf$IncomeToLoanAmnt <- ifelse(lcdf$annual_inc>0, (lcdf$annual_inc /(lcdf$loan_amnt)), 0)
+
+lcdf %>% 
+  group_by(loan_status) %>% 
+  summarise(mean(IncomeToLoanAmnt)) %>% filter(loan_status!="Current")
+
+lcdf$ratio_loanAmnt_installment <- lcdf$loan_amnt/lcdf$installment
+#grade,status
+lcdf %>% 
+  group_by(loan_status) %>% 
+  summarise(mean(ratio_loanAmnt_installment)) %>% filter(loan_status!="Current")
+
+#2. C.
+#missing value proportions in each column
+colMeans(is.na(lcdf)) #%>% view()
+ncol(lcdf)#145
+
+#Data with Full of NA
+#check column with all #NA
+colMeans(is.na(lcdf))[colMeans(is.na(lcdf))==1]
+#list of column with all #NA
+toString(names(lcdf)[colMeans(is.na(lcdf))==1])
+
+
+rm_na<-names(lcdf)[colMeans(is.na(lcdf))==1]
+lcdf <- lcdf %>% select(-rm_na)
+#check the no. of col
+ncol(lcdf) #108
+
+#Remove variables which have more than 60% missing values
+rm_60<-names(lcdf)[colMeans(is.na(lcdf))>0.6]
+lcdf <- lcdf %>% select(-rm_60)
+#check the no. of col
+ncol(lcdf) #88
+
+#columns where there are missing values
+colMeans(is.na(lcdf))[colMeans(is.na(lcdf))>0]
+
+#replacing all columns with NA missing values with their median values or a much larger number
+lcdf<- lcdf %>% replace_na(list(mths_since_last_delinq=500, revol_util=median(lcdf$revol_util, na.rm=TRUE), bc_open_to_buy=median(lcdf$bc_open_to_buy, na.rm=TRUE), mo_sin_old_il_acct=1000, mths_since_recent_bc=1000, mths_since_recent_inq=50, num_tl_120dpd_2m = median(lcdf$num_tl_120dpd_2m, na.rm=TRUE),percent_bc_gt_75 = median(lcdf$percent_bc_gt_75, na.rm=TRUE), bc_util=median(lcdf$bc_util, na.rm=TRUE),pct_tl_nvr_dlq =median(lcdf$pct_tl_nvr_dlq ,na.rm=TRUE),
+avg_cur_bal=median(lcdf$avg_cur_bal,na.rm=TRUE)
+,num_rev_accts=median(lcdf$num_rev_accts,na.rm=TRUE) ))
+
+#Replacing NA with "missing"
+lcdf<- lcdf %>% replace_na(list(emp_title="missing",title="missing",last_pymnt_d="missing",last_credit_pull_d="missing"))
+
+#columns where there are missing values
+colMeans(is.na(lcdf))[colMeans(is.na(lcdf))>0]
+colMeans(is.na(lcdf))
+
+
+#3
+
+#Drop some other columns which are not useful and those which will cause 'leakage'
+lcdf <- lcdf %>% select(-c(funded_amnt_inv, term, emp_title, pymnt_plan, title, zip_code, addr_state, out_prncp, out_prncp_inv, total_pymnt_inv, total_rec_prncp, total_rec_int,total_rec_late_fee,recoveries, collection_recovery_fee, last_credit_pull_d, policy_code, disbursement_method, debt_settlement_flag, hardship_flag, application_type))
+
+#Q 4
+
+library(pROC)
+
+# For the numeric variables:
+aucsNum<-sapply(lcdf %>% select_if(is.numeric), auc, response=lcdf$loan_status)
+  #Please make sure we understand what is happening here.  How does sapply work?
+
+
+#Or considering both numeric and factor variables:
+aucAll<- sapply(lcdf %>% mutate_if(is.factor, as.numeric) %>% select_if(is.numeric), auc, response=lcdf$loan_status) 
+#aucAll<- sapply(lcdf %>% mutate_if(is.factor, as.numeric) %>% select_if(is.numeric), pROC::auc, response=lcdf$loan_status)
+
+
+
+#TO determine which variables have auc > 0.5
+aucAll[aucAll>0.5]
+
+#Or, we can use the tidy(..) function from the broom package - which converts the 'messy' output into a tidy form as a tibble
+library(broom)
+
+df1<-tidy(aucAll[aucAll > 0.5]) %>% view()
+
+# or  in any range of values like, tidy(aucAll[aucAll >=0.5 & aucAll < 0.6])
+# or in sorted order
+tidy(aucAll) %>% arrange(desc(aucAll))
+
+dim(lcdf)
+
+lcdf %>% head()
+```
+
